@@ -1,0 +1,8 @@
+[package]
+name = "metadata"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nom = { workspace = true }
+encoding_rs = { workspace = true }

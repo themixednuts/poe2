@@ -1,0 +1,17 @@
+[package]
+name = "bundle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytemuck = { workspace = true }
+murmurhash64 = { workspace = true }
+oodle-safe = { workspace = true }
+oodle-sys = { workspace = true }
+rayon = { workspace = true }
+globset = { workspace = true }
+tracing = { workspace = true, optional = true }
+dashmap = { workspace = true }
+
+[features]
+tracing = ["dep:tracing"]
