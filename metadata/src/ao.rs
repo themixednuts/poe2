@@ -1,23 +1,14 @@
 mod ast;
 
-use crate::{
-    core::{
-        bom, expr_block, extends, is_abstract,
-        tokens::{Expr, ExprBlock, Span},
-        version,
-    },
-    visitor::Visitor,
+use crate::core::{
+    bom, expr, extends, is_abstract,
+    tokens::{Expr, Span},
+    version,
 };
 use nom::{combinator::opt, multi::many0, sequence::Tuple, IResult};
 
 pub fn parse_ao<'a>(input: Span<'a>) -> IResult<Span<'a>, AO<'a>> {
-    (
-        opt(bom),
-        version,
-        opt(is_abstract),
-        extends,
-        many0(expr_block),
-    )
+    (opt(bom), version, opt(is_abstract), extends, many0(expr))
         .parse(input)
         .map(|(input, (_, version, is_abstract, extends, blocks))| {
             (
@@ -40,7 +31,7 @@ pub struct AO<'a> {
     version: u32,
     is_abstract: bool,
     extends: Option<Span<'a>>,
-    children: Vec<ExprBlock<'a>>,
+    children: Vec<Expr<'a>>,
 }
 
 // impl AO<'_> {
@@ -103,7 +94,7 @@ mod tests {
         let src = include_bytes!("../resources/character.aoc");
         let src = read_string_from_utf16(src);
 
-        // let (input, ao) = parse_ao(Span::new(&src)).unwrap();
+        // let (input, ao) = parse_ao(Span::new(&src, false)).unwrap();
         // dbg!(&ao);
 
         // assert_eq!(ao.version, 2);
@@ -115,9 +106,6 @@ mod tests {
     fn gravestone_aoc() {
         let src = include_bytes!("../resources/gravestoneamuletheld.aoc");
         let src = read_string_from_utf16(src);
-
-        let (input, ao) = parse_ao(Span::new(&src)).unwrap();
-        dbg!(&ao);
 
         // assert_eq!(ao.version, 2);
         // assert_eq!(ao.is_abstract, false);

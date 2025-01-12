@@ -1,7 +1,8 @@
-use super::Comment;
-use nom_locate::LocatedSpan;
+use nom_span::Spanned;
 
-pub(crate) type Span<'a> = LocatedSpan<&'a str>;
+use super::Comment;
+
+pub(crate) type Span<'a> = Spanned<&'a str>;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Expr<'a> {
@@ -84,7 +85,7 @@ pub(crate) struct ExprBlock<'a> {
     pub r#type: &'a str,
     pub extends: Option<&'a str>,
     pub doc: Option<Comment<'a>>,
-    pub comment: Option<Comment<'a>>,
+    // pub comment: Option<Comment<'a>>,
     pub values: Vec<Expr<'a>>,
     pub span: Span<'a>,
     pub commented_out: bool,
@@ -101,7 +102,7 @@ pub(crate) struct ExprAssign<'a> {
     pub left: Ident<'a>,
     pub right: Box<Expr<'a>>,
     pub doc: Option<Comment<'a>>,
-    pub comment: Option<Comment<'a>>,
+    // pub comment: Option<Comment<'a>>,
     pub commented_out: bool,
 }
 
