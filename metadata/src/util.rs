@@ -1,11 +1,10 @@
-use encoding_rs::mem;
-
 pub fn read_string_from_utf16(src: &[u8]) -> String {
-    let mut buffer = vec![0; src.len() * 3];
-    let len = mem::convert_utf8_to_utf16(&src, &mut buffer);
+    let chunks = src.chunks_exact(2);
+    assert_eq!(0, chunks.remainder().len());
 
-    let buffer: Vec<u16> = buffer.chunks(2).skip(1).map(|chunk| chunk[0]).collect();
+    let buffer: Vec<u16> = chunks
+        .map(|byte| u16::from_le_bytes([byte[0], byte[1]]))
+        .collect();
 
-    let src = String::from_utf16(&buffer).unwrap();
-    src.trim_matches('\0').to_string()
+    String::from_utf16(&buffer).unwrap()
 }

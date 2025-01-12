@@ -44,7 +44,7 @@ where
         Ok(Self::try_from(buf.as_slice()).unwrap())
     }
 
-    pub fn from_slice<'a>(slice: &'a [u8]) -> std::io::Result<Self> {
+    pub fn from_slice(slice: &[u8]) -> std::io::Result<Self> {
         Bundle::try_from(slice)
     }
 
@@ -108,7 +108,7 @@ where
                     )
                 };
 
-                // FIXME something is wrong here
+                // FIXME something is wrong here, why doesnt this compress to the same size
                 let mut compressed = vec![0; compressed_size as usize];
                 let compressed_size = oodle_safe::compress(
                     oodle_safe::Compressor::Hydra,

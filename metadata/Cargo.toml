@@ -5,4 +5,6 @@ edition = "2021"
 
 [dependencies]
 nom = { workspace = true }
+nom_locate = { workspace = true }
 encoding_rs = { workspace = true }
+indexmap = { workspace = true }

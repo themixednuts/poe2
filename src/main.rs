@@ -46,9 +46,9 @@ fn main() {
 
     assert!(input.exists());
     progress.set_message("Reading Index...");
-    let mut file = std::fs::read(&input.join("Bundles2").join("_.index.bin")).unwrap();
+    let file = std::fs::read(input.join("Bundles2").join("_.index.bin")).unwrap();
 
-    let bundle: Bundle<Index> = bundle::Bundle::from_slice(&mut file).unwrap();
+    let bundle: Bundle<Index> = bundle::Bundle::from_slice(file.as_slice()).unwrap();
     progress.set_message("Decompressing Index...");
     let index = bundle.decompress().unwrap();
 
@@ -69,7 +69,7 @@ fn main() {
             let pattern = builder.build().unwrap();
 
             let matching = files
-                .into_iter()
+                .iter()
                 .filter(|(path, _)| pattern.is_match(path.to_str().unwrap()))
                 .cloned()
                 .collect::<Vec<_>>();
@@ -138,22 +138,18 @@ where
 
 struct CliClackVisitor<'a>(&'a ProgressBar);
 
-impl<'a> Visit for CliClackVisitor<'a> {
+impl Visit for CliClackVisitor<'_> {
     fn record_debug(&mut self, _field: &tracing::field::Field, _value: &dyn std::fmt::Debug) {}
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        match field.name() {
-            "bundle" => {
-                let width = value.len().min(50);
-                self.0.set_message(&format!("{:<50}...", &value[..width]))
-            }
-            _ => {}
+        if field.name() == "bundle" {
+            let width = value.len().min(50);
+            self.0.set_message(format!("{:<50}...", &value[..width]))
         }
     }
 
     fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        match field.name() {
-            "done" => self.0.inc(value),
-            _ => {}
+        if field.name() == "done" {
+            self.0.inc(value)
         }
     }
 }

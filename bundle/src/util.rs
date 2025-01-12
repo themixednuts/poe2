@@ -33,9 +33,8 @@ pub fn read_i64(slice: &[u8], offset: &mut usize) -> i64 {
 }
 pub fn find_cstring(slice: &[u8], offset: &mut usize) -> Option<String> {
     let slice = &slice[*offset..];
-    let Some(pos) = slice.iter().position(|&b| b == 0) else {
-        return None;
-    };
+    let pos = slice.iter().position(|&b| b == 0)?;
+
     let string = CString::new(&slice[..pos])
         .expect("no null")
         .into_string()

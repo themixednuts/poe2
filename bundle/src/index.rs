@@ -155,7 +155,7 @@ impl<'a> Index<'a> {
         let pattern = builder.build().unwrap();
         let filtered = self.iter_bundles().filter_map(|(bundle, files)| {
             let matching = files
-                .into_iter()
+                .iter()
                 .filter(|(path, _)| pattern.is_match(path.to_str().unwrap()))
                 .cloned()
                 .collect::<Vec<_>>();
@@ -181,9 +181,6 @@ impl<'a> Index<'a> {
     pub fn iter_bundles(
         &'a self,
     ) -> impl ParallelIterator<Item = (BundleRecord, &'a Vec<(PathBuf, &'a FileRecord)>)> {
-        // TODO figure out parrellel later.......hmmm
-        // if we figure it out, we'll need to revisit the thread work between bundle.decompress and this
-
         let paths = self.build_paths();
         let bundles = &self.bundles;
 
@@ -218,7 +215,6 @@ impl<'a> Index<'a> {
                         index -= 1;
                         let mut string = find_cstring(slice, &mut offset).unwrap();
                         if (index as usize) < path_slice.len() {
-                            // TODO do we need clone?
                             let mut prev = path_slice[index as usize].clone();
                             prev.push_str(string.as_str());
                             string = prev;
@@ -243,7 +239,6 @@ impl<'a> Index<'a> {
         })
     }
 
-    // TODO Find the link to paths
     pub fn files(&self) {
         for file in &self.files {
             let hash = file.hash;
@@ -255,65 +250,65 @@ impl<'a> Index<'a> {
     }
 }
 
-impl<'a> Into<Vec<u8>> for Index<'a> {
-    fn into(self) -> Vec<u8> {
+impl From<Index<'_>> for Vec<u8> {
+    fn from(val: Index) -> Self {
         let mut data = Vec::new();
 
-        let bundle_count = self.bundles.len() as u32;
+        let bundle_count = val.bundles.len() as u32;
         data.extend_from_slice(&bundle_count.to_le_bytes());
-        for bundle in self.bundles {
+        for bundle in val.bundles {
             data.extend_from_slice(Into::<Vec<u8>>::into(bundle).as_slice());
         }
 
-        let file_count = self.files.len() as u32;
+        let file_count = val.files.len() as u32;
         data.extend_from_slice(&file_count.to_le_bytes());
-        for file in self.files {
+        for file in val.files {
             data.extend_from_slice(Into::<Vec<u8>>::into(file).as_slice());
         }
 
-        let paths_count = self.paths.len() as u32;
+        let paths_count = val.paths.len() as u32;
         data.extend_from_slice(&paths_count.to_le_bytes());
-        for path in self.paths {
+        for path in val.paths {
             data.extend_from_slice(Into::<Vec<u8>>::into(path).as_slice());
         }
 
-        let path_bundle: Vec<u8> = self.path_bundle.into();
+        let path_bundle: Vec<u8> = val.path_bundle.into();
         data.extend(path_bundle);
 
         data
     }
 }
 
-impl<'a> Into<Vec<u8>> for &Index<'a> {
-    fn into(self) -> Vec<u8> {
+impl From<&Index<'_>> for Vec<u8> {
+    fn from(val: &Index) -> Vec<u8> {
         let mut data = Vec::new();
 
-        let bundle_count = self.bundles.len() as u32;
+        let bundle_count = val.bundles.len() as u32;
         data.extend_from_slice(&bundle_count.to_le_bytes());
-        for bundle in self.bundles.clone() {
+        for bundle in val.bundles.clone() {
             data.extend_from_slice(Into::<Vec<u8>>::into(bundle).as_slice());
         }
 
-        let file_count = self.files.len() as u32;
+        let file_count = val.files.len() as u32;
         data.extend_from_slice(&file_count.to_le_bytes());
-        for file in self.files.clone() {
+        for file in val.files.clone() {
             data.extend_from_slice(Into::<Vec<u8>>::into(file).as_slice());
         }
 
-        let paths_count = self.paths.len() as u32;
+        let paths_count = val.paths.len() as u32;
         data.extend_from_slice(&paths_count.to_le_bytes());
-        for path in self.paths.clone() {
+        for path in val.paths.clone() {
             data.extend_from_slice(Into::<Vec<u8>>::into(path).as_slice());
         }
 
-        let path_bundle: Vec<u8> = self.path_bundle.clone().into();
+        let path_bundle: Vec<u8> = val.path_bundle.clone().into();
         data.extend(path_bundle);
 
         data
     }
 }
 
-impl<'a> TryFrom<&[u8]> for Index<'a> {
+impl TryFrom<&[u8]> for Index<'_> {
     type Error = std::io::Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
@@ -381,14 +376,14 @@ impl BundleRecord {
     }
 }
 
-impl Into<Vec<u8>> for BundleRecord {
-    fn into(self) -> Vec<u8> {
-        let mut data = Vec::with_capacity(self.size());
-        let path_len = self.path.len() as u32;
+impl From<BundleRecord> for Vec<u8> {
+    fn from(val: BundleRecord) -> Self {
+        let mut data = Vec::with_capacity(val.size());
+        let path_len = val.path.len() as u32;
 
         data.extend_from_slice(&path_len.to_le_bytes());
-        data.extend(self.path.into_bytes());
-        data.extend_from_slice(&self.uncompressed_size.to_le_bytes());
+        data.extend(val.path.into_bytes());
+        data.extend_from_slice(&val.uncompressed_size.to_le_bytes());
 
         data
     }
@@ -406,7 +401,7 @@ impl TryFrom<&[u8]> for BundleRecord {
         }
 
         let str_len =
-            u32::from_le_bytes(value[0..4].try_into().map_err(|e| io::Error::other(e))?) as usize;
+            u32::from_le_bytes(value[0..4].try_into().map_err(io::Error::other)?) as usize;
 
         let record_size = 4 + str_len + 4;
 
@@ -450,9 +445,9 @@ impl AsRef<[u8]> for FileRecord {
     }
 }
 
-impl Into<Vec<u8>> for FileRecord {
-    fn into(self) -> Vec<u8> {
-        bytemuck::bytes_of(&self).to_vec()
+impl From<FileRecord> for Vec<u8> {
+    fn from(val: FileRecord) -> Self {
+        bytemuck::bytes_of(&val).to_vec()
     }
 }
 
@@ -503,9 +498,9 @@ impl AsRef<[u8]> for PathRecord {
     }
 }
 
-impl Into<Vec<u8>> for PathRecord {
-    fn into(self) -> Vec<u8> {
-        bytemuck::bytes_of(&self).to_vec()
+impl From<PathRecord> for Vec<u8> {
+    fn from(val: PathRecord) -> Self {
+        bytemuck::bytes_of(&val).to_vec()
     }
 }
 
