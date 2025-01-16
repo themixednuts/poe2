@@ -110,7 +110,7 @@ impl<'a> Index<'a> {
                         let parent = file_path.parent().unwrap();
 
                         if !parent.exists() {
-                            std::fs::create_dir_all(&parent).unwrap();
+                            std::fs::create_dir_all(parent).unwrap();
                         }
 
                         let mut file = std::fs::File::create(&file_path).unwrap();
@@ -198,7 +198,7 @@ impl<'a> Index<'a> {
 
             let mut paths: HashMap<usize, Vec<(PathBuf, &FileRecord)>> = HashMap::new();
 
-            for (_i, path) in self.paths.iter().enumerate() {
+            for path in self.paths.iter() {
                 let slice = &bytes[path.offset as usize..(path.offset + path.size) as usize];
                 let mut offset = 0;
                 let mut path_slice: Vec<String> = vec![];
@@ -226,7 +226,7 @@ impl<'a> Index<'a> {
                                 paths
                                     .entry(fr.bundle_idx as usize)
                                     .or_default()
-                                    .push((string.into(), &fr));
+                                    .push((string.into(), fr));
                             } else {
                                 #[cfg(feature = "tracing")]
                                 error!("Hash not found: {}", string);

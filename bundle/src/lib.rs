@@ -30,6 +30,34 @@ impl<T> Bundle<T> {
     pub fn size(&self) -> usize {
         12 + self.seek_table_size as usize + self.compressed_size as usize
     }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        let mut data: Vec<u8> = Vec::with_capacity(self.compressed_size as usize);
+
+        data.extend_from_slice(&self.uncompressed_size.to_le_bytes());
+        data.extend_from_slice(&self.compressed_size.to_le_bytes());
+        data.extend_from_slice(&self.seek_table_size.to_le_bytes());
+        data.extend_from_slice(&self.seek_table.compressor.to_le_bytes());
+        data.extend_from_slice(&self.seek_table.seekChunksIndependent.to_le_bytes());
+        data.extend_from_slice(&self.seek_table.totalRawLen.to_le_bytes());
+        data.extend_from_slice(&self.seek_table.totalCompLen.to_le_bytes());
+        data.extend_from_slice(&self.seek_table.numSeekChunks.to_le_bytes());
+        data.extend_from_slice(&self.seek_table.seekChunkLen.to_le_bytes());
+        data.extend_from_slice(&0i64.to_le_bytes());
+        data.extend_from_slice(&0i64.to_le_bytes());
+        for size in self.seek_chunk_comp_lens.as_ref() {
+            data.extend_from_slice(&size.to_le_bytes());
+        }
+        for chunk in self.chunks.as_ref() {
+            data.extend(chunk.as_ref());
+        }
+        if let Some(crcs) = &self.raw_crcs {
+            for crc in crcs.as_ref() {
+                data.extend_from_slice(&crc.to_le_bytes());
+            }
+        }
+        data
+    }
 }
 
 impl<T> Bundle<T>
@@ -182,7 +210,7 @@ where
 
         let chunks: Arc<[Arc<[u8]>]> = chunks
             .into_iter()
-            .map(|vec| Arc::from(vec))
+            .map(Arc::from)
             .collect::<Vec<Arc<[u8]>>>()
             .into();
 
@@ -196,10 +224,6 @@ where
             chunks,
             _marker: PhantomData,
         })
-    }
-
-    pub fn to_vec(self) -> Vec<u8> {
-        <Bundle<T> as Into<Vec<u8>>>::into(self)
     }
 }
 
@@ -282,22 +306,22 @@ where
 
 impl<T> From<Bundle<T>> for Vec<u8> {
     fn from(value: Bundle<T>) -> Self {
-        value.into()
+        value.to_vec()
     }
 }
 impl<T> From<&Bundle<T>> for Vec<u8> {
     fn from(value: &Bundle<T>) -> Self {
-        value.into()
+        value.to_vec()
     }
 }
 impl<T> From<Bundle<T>> for Arc<[u8]> {
     fn from(value: Bundle<T>) -> Self {
-        value.into()
+        value.to_vec().into()
     }
 }
 impl<T> From<&Bundle<T>> for Arc<[u8]> {
     fn from(value: &Bundle<T>) -> Self {
-        value.into()
+        value.to_vec().into()
     }
 }
 
