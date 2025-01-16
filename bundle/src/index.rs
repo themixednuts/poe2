@@ -39,14 +39,14 @@ impl<'a> Index<'a> {
         self.files.iter().map(|file| file.size as usize).sum()
     }
 
-    pub fn list_bundles(&'a self) -> Vec<&'a PathBuf> {
-        self.iter_bundles()
-            .map(|(_, records)| records.iter().map(|(name, _)| name).collect::<Vec<_>>())
-            .flatten()
-            .collect()
-    }
+    // pub fn list_bundles(&'a self) -> Vec<&'a PathBuf> {
+    //     self.iter_bundles()
+    //         .map(|(_, records)| records.iter().map(|(name, _)| name).collect::<Vec<_>>())
+    //         .flatten()
+    //         .collect()
+    // }
 
-    fn extract<I, T>(
+    pub fn extract<I, T>(
         &'a self,
         iter: I,
         path: impl AsRef<Path>,
@@ -54,7 +54,7 @@ impl<'a> Index<'a> {
         shaders: bool,
     ) -> usize
     where
-        I: ParallelIterator<Item = (BundleRecord, T)>,
+        I: ParallelIterator<Item = (BundleRecord, T)> + Clone,
         T: AsRef<[(PathBuf, &'a FileRecord)]>,
     {
         let bundles_path = path.as_ref().join("Bundles2");
@@ -132,61 +132,25 @@ impl<'a> Index<'a> {
             .sum()
     }
 
-    pub fn extract_all(
-        &'a self,
-        bundles_path: impl AsRef<Path>,
-        out_dir: impl AsRef<Path>,
-        shaders: bool,
-    ) -> usize {
-        self.extract(self.iter_bundles(), &bundles_path, &out_dir, shaders)
-    }
-
-    pub fn extract_files(
-        &'a self,
-        pattern: impl AsRef<str>,
-        bundles_path: impl AsRef<Path>,
-        out_dir: impl AsRef<Path>,
-        shaders: bool,
-    ) -> usize {
-        let mut builder = GlobSetBuilder::new();
-        pattern.as_ref().split(',').for_each(|pat| {
-            builder.add(Glob::new(pat).unwrap());
-        });
-        let pattern = builder.build().unwrap();
-        let filtered = self.iter_bundles().filter_map(|(bundle, files)| {
-            let matching = files
-                .iter()
-                .filter(|(path, _)| pattern.is_match(path.to_str().unwrap()))
-                .cloned()
-                .collect::<Vec<_>>();
-
-            if matching.is_empty() {
-                None
-            } else {
-                Some((bundle, matching))
-            }
-        });
-        self.extract(filtered, &bundles_path, &out_dir, shaders)
-    }
-
-    pub fn bundle_info_by_idx(
-        &'a self,
-        idx: usize,
-    ) -> Option<(&'a BundleRecord, &'a Arc<[(PathBuf, &'a FileRecord)]>)> {
-        self.build_paths()
-            .get(&idx)
-            .map(|info| (&self.bundles[idx], info))
-    }
+    // pub fn bundle_info_by_idx(
+    //     &'a self,
+    //     idx: usize,
+    // ) -> Option<(&'a BundleRecord, Arc<&'a [(PathBuf, &'a FileRecord)]>)> {
+    //     self.build_paths()
+    //         .get(&idx)
+    //         .map(|info| (&self.bundles[idx], info))
+    // }
 
     pub fn iter_bundles(
         &'a self,
-    ) -> impl ParallelIterator<Item = (BundleRecord, &'a Arc<[(PathBuf, &'a FileRecord)]>)> {
+    ) -> impl ParallelIterator<Item = (BundleRecord, &'a Arc<[(PathBuf, &'a FileRecord)]>)> + Clone
+    {
         let paths = self.build_paths();
         let bundles = &self.bundles;
 
         paths
-            .par_iter()
-            .map(move |(&idx, info)| (bundles[idx].clone(), info))
+            .into_par_iter()
+            .map(|(&idx, info)| (bundles[idx].clone(), info))
     }
 
     fn build_paths(&'a self) -> &'a HashMap<usize, Arc<[(PathBuf, &'a FileRecord)]>> {
