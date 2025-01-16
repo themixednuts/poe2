@@ -19,11 +19,11 @@ use tracing::{error, info, trace, warn};
 #[derive(Debug, Clone)]
 pub struct Index<'a> {
     /// List of paths to a Bundle.bin file
-    bundles: Vec<BundleRecord>,
-    files: Vec<FileRecord>,
-    paths: Vec<PathRecord>,
-    path_bundle: Bundle<Vec<u8>>,
-    cache: OnceLock<HashMap<usize, Vec<(PathBuf, &'a FileRecord)>>>,
+    bundles: Arc<[BundleRecord]>,
+    files: Arc<[FileRecord]>,
+    paths: Arc<[PathRecord]>,
+    path_bundle: Bundle<Arc<[u8]>>,
+    cache: OnceLock<HashMap<usize, Arc<[(PathBuf, &'a FileRecord)]>>>,
 }
 
 impl<'a> Index<'a> {
@@ -83,7 +83,7 @@ impl<'a> Index<'a> {
 
                 #[cfg(feature = "tracing")]
                 info!(
-                    bundle = bundlerecord.path,
+                    bundle = bundlerecord.path.as_ref(),
                     "Decompressing {}.bundle.bin", bundlerecord.path,
                 );
 
@@ -172,7 +172,7 @@ impl<'a> Index<'a> {
     pub fn bundle_info_by_idx(
         &'a self,
         idx: usize,
-    ) -> Option<(&'a BundleRecord, &'a Vec<(PathBuf, &'a FileRecord)>)> {
+    ) -> Option<(&'a BundleRecord, &'a Arc<[(PathBuf, &'a FileRecord)]>)> {
         self.build_paths()
             .get(&idx)
             .map(|info| (&self.bundles[idx], info))
@@ -180,7 +180,7 @@ impl<'a> Index<'a> {
 
     pub fn iter_bundles(
         &'a self,
-    ) -> impl ParallelIterator<Item = (BundleRecord, &'a Vec<(PathBuf, &'a FileRecord)>)> {
+    ) -> impl ParallelIterator<Item = (BundleRecord, &'a Arc<[(PathBuf, &'a FileRecord)]>)> {
         let paths = self.build_paths();
         let bundles = &self.bundles;
 
@@ -189,7 +189,7 @@ impl<'a> Index<'a> {
             .map(move |(&idx, info)| (bundles[idx].clone(), info))
     }
 
-    fn build_paths(&'a self) -> &'a HashMap<usize, Vec<(PathBuf, &'a FileRecord)>> {
+    fn build_paths(&'a self) -> &'a HashMap<usize, Arc<[(PathBuf, &'a FileRecord)]>> {
         //TODO check back later if added mutable support, cache might bite us
 
         self.cache.get_or_init(|| {
@@ -235,12 +235,12 @@ impl<'a> Index<'a> {
                     }
                 }
             }
-            paths
+            paths.into_iter().map(|(k, v)| (k, Arc::from(v))).collect()
         })
     }
 
     pub fn files(&self) {
-        for file in &self.files {
+        for file in self.files.as_ref() {
             let hash = file.hash;
             println!(
                 "File: {} in Directory: {}",
@@ -256,19 +256,19 @@ impl From<Index<'_>> for Vec<u8> {
 
         let bundle_count = val.bundles.len() as u32;
         data.extend_from_slice(&bundle_count.to_le_bytes());
-        for bundle in val.bundles {
+        for bundle in val.bundles.clone().as_ref() {
             data.extend_from_slice(Into::<Vec<u8>>::into(bundle).as_slice());
         }
 
         let file_count = val.files.len() as u32;
         data.extend_from_slice(&file_count.to_le_bytes());
-        for file in val.files {
+        for &file in val.files.as_ref() {
             data.extend_from_slice(Into::<Vec<u8>>::into(file).as_slice());
         }
 
         let paths_count = val.paths.len() as u32;
         data.extend_from_slice(&paths_count.to_le_bytes());
-        for path in val.paths {
+        for &path in val.paths.as_ref() {
             data.extend_from_slice(Into::<Vec<u8>>::into(path).as_slice());
         }
 
@@ -278,6 +278,34 @@ impl From<Index<'_>> for Vec<u8> {
         data
     }
 }
+impl From<Index<'_>> for Arc<[u8]> {
+    fn from(val: Index) -> Self {
+        let mut data = Vec::new();
+
+        let bundle_count = val.bundles.len() as u32;
+        data.extend_from_slice(&bundle_count.to_le_bytes());
+        for bundle in val.bundles.clone().as_ref() {
+            data.extend_from_slice(Into::<Vec<u8>>::into(bundle).as_slice());
+        }
+
+        let file_count = val.files.len() as u32;
+        data.extend_from_slice(&file_count.to_le_bytes());
+        for &file in val.files.as_ref() {
+            data.extend_from_slice(Into::<Vec<u8>>::into(file).as_slice());
+        }
+
+        let paths_count = val.paths.len() as u32;
+        data.extend_from_slice(&paths_count.to_le_bytes());
+        for &path in val.paths.as_ref() {
+            data.extend_from_slice(Into::<Vec<u8>>::into(path).as_slice());
+        }
+
+        let path_bundle: Vec<u8> = val.path_bundle.into();
+        data.extend(path_bundle);
+
+        data.into()
+    }
+}
 
 impl From<&Index<'_>> for Vec<u8> {
     fn from(val: &Index) -> Vec<u8> {
@@ -285,19 +313,19 @@ impl From<&Index<'_>> for Vec<u8> {
 
         let bundle_count = val.bundles.len() as u32;
         data.extend_from_slice(&bundle_count.to_le_bytes());
-        for bundle in val.bundles.clone() {
+        for bundle in val.bundles.as_ref() {
             data.extend_from_slice(Into::<Vec<u8>>::into(bundle).as_slice());
         }
 
         let file_count = val.files.len() as u32;
         data.extend_from_slice(&file_count.to_le_bytes());
-        for file in val.files.clone() {
+        for &file in val.files.as_ref() {
             data.extend_from_slice(Into::<Vec<u8>>::into(file).as_slice());
         }
 
         let paths_count = val.paths.len() as u32;
         data.extend_from_slice(&paths_count.to_le_bytes());
-        for path in val.paths.clone() {
+        for &path in val.paths.as_ref() {
             data.extend_from_slice(Into::<Vec<u8>>::into(path).as_slice());
         }
 
@@ -305,6 +333,34 @@ impl From<&Index<'_>> for Vec<u8> {
         data.extend(path_bundle);
 
         data
+    }
+}
+impl From<&Index<'_>> for Arc<[u8]> {
+    fn from(val: &Index) -> Self {
+        let mut data = Vec::new();
+
+        let bundle_count = val.bundles.len() as u32;
+        data.extend_from_slice(&bundle_count.to_le_bytes());
+        for bundle in val.bundles.as_ref() {
+            data.extend_from_slice(Into::<Vec<u8>>::into(bundle).as_slice());
+        }
+
+        let file_count = val.files.len() as u32;
+        data.extend_from_slice(&file_count.to_le_bytes());
+        for &file in val.files.as_ref() {
+            data.extend_from_slice(Into::<Vec<u8>>::into(file).as_slice());
+        }
+
+        let paths_count = val.paths.len() as u32;
+        data.extend_from_slice(&paths_count.to_le_bytes());
+        for &path in val.paths.as_ref() {
+            data.extend_from_slice(Into::<Vec<u8>>::into(path).as_slice());
+        }
+
+        let path_bundle: Vec<u8> = val.path_bundle.clone().into();
+        data.extend(path_bundle);
+
+        data.into()
     }
 }
 
@@ -352,9 +408,9 @@ impl TryFrom<&[u8]> for Index<'_> {
         let _path_bundle = Bundle::try_from(data.as_slice()).unwrap();
 
         Ok(Self {
-            bundles,
-            files,
-            paths,
+            bundles: bundles.into(),
+            files: files.into(),
+            paths: paths.into(),
             path_bundle: _path_bundle,
             cache: OnceLock::new(),
         })
@@ -363,7 +419,7 @@ impl TryFrom<&[u8]> for Index<'_> {
 
 #[derive(Debug, Clone)]
 pub struct BundleRecord {
-    path: String,
+    path: Arc<str>,
     uncompressed_size: u32,
 }
 
@@ -382,10 +438,34 @@ impl From<BundleRecord> for Vec<u8> {
         let path_len = val.path.len() as u32;
 
         data.extend_from_slice(&path_len.to_le_bytes());
-        data.extend(val.path.into_bytes());
+        data.extend(val.path.as_bytes());
         data.extend_from_slice(&val.uncompressed_size.to_le_bytes());
 
         data
+    }
+}
+impl From<&BundleRecord> for Vec<u8> {
+    fn from(val: &BundleRecord) -> Self {
+        let mut data = Vec::with_capacity(val.size());
+        let path_len = val.path.len() as u32;
+
+        data.extend_from_slice(&path_len.to_le_bytes());
+        data.extend(val.path.as_bytes());
+        data.extend_from_slice(&val.uncompressed_size.to_le_bytes());
+
+        data
+    }
+}
+impl From<BundleRecord> for Arc<[u8]> {
+    fn from(val: BundleRecord) -> Self {
+        let mut data = Vec::with_capacity(val.size());
+        let path_len = val.path.len() as u32;
+
+        data.extend_from_slice(&path_len.to_le_bytes());
+        data.extend(val.path.as_bytes());
+        data.extend_from_slice(&val.uncompressed_size.to_le_bytes());
+
+        data.into()
     }
 }
 
@@ -414,7 +494,8 @@ impl TryFrom<&[u8]> for BundleRecord {
 
         let path = std::str::from_utf8(&value[4..str_len + 4])
             .expect("Invalid UTF-8")
-            .to_string();
+            .to_string()
+            .into();
 
         let uncompressed_size =
             u32::from_le_bytes(value[str_len + 4..record_size].try_into().unwrap());
@@ -448,6 +529,11 @@ impl AsRef<[u8]> for FileRecord {
 impl From<FileRecord> for Vec<u8> {
     fn from(val: FileRecord) -> Self {
         bytemuck::bytes_of(&val).to_vec()
+    }
+}
+impl From<FileRecord> for Arc<[u8]> {
+    fn from(val: FileRecord) -> Self {
+        bytemuck::bytes_of(&val).to_vec().into()
     }
 }
 
@@ -501,6 +587,11 @@ impl AsRef<[u8]> for PathRecord {
 impl From<PathRecord> for Vec<u8> {
     fn from(val: PathRecord) -> Self {
         bytemuck::bytes_of(&val).to_vec()
+    }
+}
+impl From<PathRecord> for Arc<[u8]> {
+    fn from(val: PathRecord) -> Self {
+        bytemuck::bytes_of(&val).to_vec().into()
     }
 }
 

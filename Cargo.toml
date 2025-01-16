@@ -27,7 +27,7 @@ name = "bench"
 harness = false
 
 [workspace]
-members = ["bundle", "metadata"]
+members = ["bundle", "dat", "metadata"]
 
 [profile.release]
 lto = true

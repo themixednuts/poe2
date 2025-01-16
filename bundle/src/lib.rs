@@ -1,7 +1,7 @@
 pub mod index;
 mod util;
 
-use std::{ffi::c_void, io::Read, marker::PhantomData};
+use std::{ffi::c_void, io::Read, marker::PhantomData, sync::Arc};
 
 use oodle_safe::{CompressOptions, BLOCK_LEN};
 use oodle_sys::{
@@ -15,14 +15,14 @@ use rayon::prelude::*;
 use crate::util::{read_bytes, read_i32, read_i64, read_u32};
 
 #[derive(Debug, Clone)]
-pub struct Bundle<T = Vec<u8>> {
+pub struct Bundle<T = Arc<[u8]>> {
     uncompressed_size: u32,
     compressed_size: u32,
     seek_table_size: u32,
     seek_table: OodleLZ_SeekTable,
-    seek_chunk_comp_lens: Vec<u32>,
-    raw_crcs: Option<Vec<u32>>,
-    chunks: Vec<Vec<u8>>,
+    seek_chunk_comp_lens: Arc<[u32]>,
+    raw_crcs: Option<Arc<[u32]>>,
+    chunks: Arc<[Arc<[u8]>]>,
     _marker: PhantomData<T>,
 }
 
@@ -80,10 +80,10 @@ where
 
 impl<T> Bundle<T>
 where
-    T: Into<Vec<u8>>,
+    T: Into<Arc<[u8]>>,
 {
     pub fn new(data: T) -> Result<Self, ()> {
-        let data: Vec<u8> = data.into();
+        let data: Arc<[u8]> = data.into();
 
         let chunks: Vec<Vec<u8>> = data
             .par_chunks(BLOCK_LEN as usize)
@@ -163,23 +163,32 @@ where
         };
 
         let seek_chunk_comp_lens = unsafe {
-            seek_table
-                .seekChunkCompLens
-                .as_ref()
-                .map(|v| std::slice::from_raw_parts(v, seek_table.numSeekChunks as usize).to_vec())
+            seek_table.seekChunkCompLens.as_ref().map(|v| {
+                std::slice::from_raw_parts(v, seek_table.numSeekChunks as usize)
+                    .to_vec()
+                    .into()
+            })
         }
         .unwrap_or_default();
 
         let raw_crcs = unsafe {
-            seek_table
-                .rawCRCs
-                .as_ref()
-                .map(|v| std::slice::from_raw_parts(v, seek_table.numSeekChunks as usize).to_vec())
+            seek_table.rawCRCs.as_ref().map(|v| {
+                std::slice::from_raw_parts(v, seek_table.numSeekChunks as usize)
+                    .to_vec()
+                    .into()
+            })
         };
+        let compressed_size = compressed.len() as u32;
+
+        let chunks: Arc<[Arc<[u8]>]> = chunks
+            .into_iter()
+            .map(|vec| Arc::from(vec))
+            .collect::<Vec<Arc<[u8]>>>()
+            .into();
 
         Ok(Self {
             uncompressed_size: data.len() as u32,
-            compressed_size: compressed.len() as u32,
+            compressed_size,
             seek_table_size: seek_table_size as u32,
             seek_table,
             seek_chunk_comp_lens,
@@ -191,43 +200,6 @@ where
 
     pub fn to_vec(self) -> Vec<u8> {
         <Bundle<T> as Into<Vec<u8>>>::into(self)
-    }
-}
-
-impl<T> Into<Vec<u8>> for Bundle<T>
-where
-    T: Into<Vec<u8>>,
-{
-    fn into(self) -> Vec<u8> {
-        let mut data = Vec::with_capacity(self.size());
-
-        data.extend_from_slice(&self.uncompressed_size.to_le_bytes());
-        data.extend_from_slice(&self.compressed_size.to_le_bytes());
-        data.extend_from_slice(&self.seek_table_size.to_le_bytes());
-
-        data.extend_from_slice(&self.seek_table.compressor.to_le_bytes());
-        data.extend_from_slice(&self.seek_table.seekChunksIndependent.to_le_bytes());
-        data.extend_from_slice(&self.seek_table.totalRawLen.to_le_bytes());
-        data.extend_from_slice(&self.seek_table.totalCompLen.to_le_bytes());
-        data.extend_from_slice(&self.seek_table.numSeekChunks.to_le_bytes());
-        data.extend_from_slice(&self.seek_table.seekChunkLen.to_le_bytes());
-        data.extend_from_slice(&0i64.to_le_bytes());
-        data.extend_from_slice(&0i64.to_le_bytes());
-
-        for size in &self.seek_chunk_comp_lens {
-            data.extend_from_slice(&size.to_le_bytes());
-        }
-        for chunk in &self.chunks {
-            data.extend(chunk);
-        }
-
-        if let Some(crcs) = &self.raw_crcs {
-            for crc in crcs {
-                data.extend_from_slice(&crc.to_le_bytes());
-            }
-        }
-
-        data
     }
 }
 
@@ -272,7 +244,7 @@ where
             .map(|&size| {
                 let chunk = value[offset..offset + size as usize].to_vec();
                 offset += size as usize;
-                chunk
+                Arc::from(chunk)
             })
             .collect();
 
@@ -288,8 +260,9 @@ where
                 .chunks_exact(size_of::<u32>())
                 .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
                 .collect();
+
             seek_table.rawCRCs = raw_crcs.as_mut_ptr();
-            Some(raw_crcs)
+            Some(raw_crcs.into())
         } else {
             None
         };
@@ -299,11 +272,32 @@ where
             compressed_size,
             seek_table_size,
             seek_table,
-            seek_chunk_comp_lens,
+            seek_chunk_comp_lens: seek_chunk_comp_lens.into(),
             raw_crcs,
             chunks,
             _marker: PhantomData,
         })
+    }
+}
+
+impl<T> From<Bundle<T>> for Vec<u8> {
+    fn from(value: Bundle<T>) -> Self {
+        value.into()
+    }
+}
+impl<T> From<&Bundle<T>> for Vec<u8> {
+    fn from(value: &Bundle<T>) -> Self {
+        value.into()
+    }
+}
+impl<T> From<Bundle<T>> for Arc<[u8]> {
+    fn from(value: Bundle<T>) -> Self {
+        value.into()
+    }
+}
+impl<T> From<&Bundle<T>> for Arc<[u8]> {
+    fn from(value: &Bundle<T>) -> Self {
+        value.into()
     }
 }
 
