@@ -77,7 +77,7 @@ fn main() {
             if matching.is_empty() {
                 None
             } else {
-                Some((bundle, matching))
+                Some((bundle, matching.into()))
             }
         })
         .map(|(_, files)| {
