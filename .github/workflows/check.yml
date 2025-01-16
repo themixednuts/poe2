@@ -1,54 +1,48 @@
 name: Check
-
 on:
   push:
     branches: ["master"]
   pull_request:
     branches: ["master"]
-
 env:
   CARGO_TERM_COLOR: always
-
 jobs:
   format:
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
       - uses: Swatinem/rust-cache@v2
       - name: Format
-        with:
-          toolchain: nightly
-        run: cargo +nightly fmt
+        run: cargo fmt --check
 
   check:
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - name: Check
-        with:
-          toolchain: nightly
-        run: cargo +nightly check
+        run: cargo check
 
   lint:
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Lint
-        with:
-          toolchain: nightly
-        run: cargo +nightly clippy
+        run: cargo clippy -- -D warnings
 
   # build:
-
   #   runs-on: windows-latest
-
   #   steps:
   #   - uses: actions/checkout@v4
+  #   - uses: dtolnay/rust-toolchain@nightly
   #   - uses: Swatinem/rust-cache@v2
   #   - name: Build
   #     run: cargo build --release --verbose

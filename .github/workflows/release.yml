@@ -9,7 +9,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: nwtools-rs
+  BINARY_NAME: poe2kit
 
 jobs:
   build:
@@ -32,18 +32,17 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Install Rust toolchain
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
-      - name: Build
-        with:
-          toolchain: nightly
         run: cargo +nightly build --release --verbose
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: target/release/${{ env.BINARY_NAME }}.exe
+          files: target/release/${{ env.BINARY_NAME }}${{ matrix.artifact_suffix }}
           generate_release_notes: true
           draft: false
           prerelease: false
